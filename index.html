@@ -911,7 +911,7 @@ document.addEventListener('pointerdown', e => {
 const $ = id => document.getElementById(id);
 const SLIDER_MAP = {
   sStiff: s => { CFG.VEL_DISS   = 0.4 + s * 2.8; },
-  sLife:  s => { CFG.DYE_DISS   = 0.3 * Math.exp(-4.1 * s); },
+  sLife:  s => { CFG.DYE_DISS   = 0.3 * Math.exp(-4.1 * s) * (1 - s); },  // s=1 → truly permanent
   sBrush: s => { CFG.BRUSH      = 0.3 + 2.2 * s; },
   sInk:   s => { CFG.INK_AMT    = 0.3 + 2.2 * s; },
   sDiff:  s => { CFG.MC_CORRECT = 0.5 * (1 - s); },
@@ -929,7 +929,7 @@ for (const id of Object.keys(SLIDER_MAP)) {
    that comes to rest. 水墨: blooming, blending, ever-moving wash.   */
 const MODES = {
   suminagashi: { sStiff:0.71, sLife:1.00, sBrush:0.23, sInk:0.32, sDiff:0.00 },
-  painterly:   { sStiff:0.11, sLife:0.27, sBrush:0.55, sInk:0.41, sDiff:0.80 },
+  painterly:   { sStiff:0.11, sLife:0.50, sBrush:0.55, sInk:0.41, sDiff:0.80 },
 };
 let modeFade = null;
 const modeEls = [...document.querySelectorAll('.mode')];
