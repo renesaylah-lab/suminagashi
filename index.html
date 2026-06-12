@@ -80,6 +80,18 @@
     transition:color .3s;
   }
   .txt:hover{ color:var(--ink); }
+  .modes{ display:flex; align-items:center; gap:14px; }
+  .mode{
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    background:none; border:none; cursor:pointer; padding:2px 1px;
+    font-family:'Zen Old Mincho',serif; font-size:12px; letter-spacing:.2em;
+    color:var(--ink-faint); transition:color .35s;
+  }
+  .mode span{
+    font:300 5.5px 'Inter',sans-serif; letter-spacing:.3em; color:inherit;
+  }
+  .mode:hover{ color:var(--ink-soft); }
+  .mode.sel{ color:var(--ink); }
 
   /* ---------- credit ---------- */
   .credit{
@@ -166,7 +178,13 @@
     .title{ left:20px; top:24px; gap:14px; }
     .title h1{ font-size:30px; }
     .title .latin{ font-size:8px; }
-    .pill{ bottom:18px; gap:12px; padding:9px 16px; }
+    .pill{
+      bottom:18px; gap:10px; padding:9px 14px;
+      flex-wrap:wrap; justify-content:center;
+      max-width:calc(100vw - 24px); border-radius:24px;
+    }
+    .modes{ gap:10px; }
+    .mode{ font-size:11px; }
     .txt{ font-size:11.5px; letter-spacing:.22em; }
     .credit{ right:16px; bottom:20px; }
     #gearBtn{ top:16px; right:16px; }
@@ -185,6 +203,11 @@
 </aside>
 
 <nav class="pill">
+  <div class="modes">
+    <button class="mode sel" data-mode="suminagashi">墨流し<span>SUMINAGASHI</span></button>
+    <button class="mode" data-mode="painterly">水墨<span>PAINTERLY</span></button>
+  </div>
+  <span class="div"></span>
   <div class="swatches">
     <button class="sw sel" data-ink="black"  style="--c:#211d1a" aria-label="墨 sumi black"></button>
     <button class="sw"     data-ink="indigo" style="--c:#2c3a64" aria-label="藍 indigo"></button>
@@ -210,11 +233,11 @@
 <aside id="panel" class="panel">
   <div class="ptitle">調整<span>TUNING</span></div>
   <div class="prow"><label><span class="jp">粘り</span><span class="en">STIFFNESS</span></label>
-    <input type="range" id="sStiff" min="0" max="1" step="0.001" value="0.54"></div>
+    <input type="range" id="sStiff" min="0" max="1" step="0.001" value="0.71"></div>
   <div class="prow"><label><span class="jp">余韻</span><span class="en">INK LIFE</span></label>
-    <input type="range" id="sLife" min="0" max="1" step="0.001" value="0.66"></div>
+    <input type="range" id="sLife" min="0" max="1" step="0.001" value="1"></div>
   <div class="prow"><label><span class="jp">筆幅</span><span class="en">BRUSH SIZE</span></label>
-    <input type="range" id="sBrush" min="0" max="1" step="0.001" value="0.32"></div>
+    <input type="range" id="sBrush" min="0" max="1" step="0.001" value="0.23"></div>
   <div class="prow"><label><span class="jp">墨量</span><span class="en">INK AMOUNT</span></label>
     <input type="range" id="sInk" min="0" max="1" step="0.001" value="0.32"></div>
   <div class="prow"><label><span class="jp">滲み</span><span class="en">DIFFUSION</span></label>
@@ -886,11 +909,55 @@ document.addEventListener('pointerdown', e => {
   }
 });
 const $ = id => document.getElementById(id);
-$('sStiff').addEventListener('input', e => { CFG.VEL_DISS = 0.4 + parseFloat(e.target.value) * 2.8; });
-$('sLife') .addEventListener('input', e => { CFG.DYE_DISS = 0.3 * Math.exp(-4.1 * parseFloat(e.target.value)); });
-$('sBrush').addEventListener('input', e => { CFG.BRUSH = 0.3 + 2.2 * parseFloat(e.target.value); });
-$('sInk')  .addEventListener('input', e => { CFG.INK_AMT = 0.3 + 2.2 * parseFloat(e.target.value); });
-$('sDiff') .addEventListener('input', e => { CFG.MC_CORRECT = 0.5 * (1 - parseFloat(e.target.value)); });
+const SLIDER_MAP = {
+  sStiff: s => { CFG.VEL_DISS   = 0.4 + s * 2.8; },
+  sLife:  s => { CFG.DYE_DISS   = 0.3 * Math.exp(-4.1 * s); },
+  sBrush: s => { CFG.BRUSH      = 0.3 + 2.2 * s; },
+  sInk:   s => { CFG.INK_AMT    = 0.3 + 2.2 * s; },
+  sDiff:  s => { CFG.MC_CORRECT = 0.5 * (1 - s); },
+};
+for (const id of Object.keys(SLIDER_MAP)) {
+  $(id).addEventListener('input', e => {
+    modeFade = null;                       // hand-tuning takes over from the preset
+    SLIDER_MAP[id](parseFloat(e.target.value));
+  });
+}
+
+/* ---------- mode presets (same solver, two temperaments) ----------
+   Values are slider positions, so a preset, the cross-fade and the
+   panel always agree. 墨流し: permanent ink, coherent bands, water
+   that comes to rest. 水墨: blooming, blending, ever-moving wash.   */
+const MODES = {
+  suminagashi: { sStiff:0.71, sLife:1.00, sBrush:0.23, sInk:0.32, sDiff:0.00 },
+  painterly:   { sStiff:0.11, sLife:0.27, sBrush:0.55, sInk:0.41, sDiff:0.80 },
+};
+let modeFade = null;
+const modeEls = [...document.querySelectorAll('.mode')];
+function setMode(name, instant) {
+  modeEls.forEach(b => b.classList.toggle('sel', b.dataset.mode === name));
+  const to = MODES[name];
+  if (instant) {
+    for (const k of Object.keys(to)) { SLIDER_MAP[k](to[k]); $(k).value = to[k]; }
+    return;
+  }
+  const from = {};
+  for (const k of Object.keys(to)) from[k] = parseFloat($(k).value);
+  modeFade = { from, to, t0: nowS(), dur: 1.4 };
+}
+modeEls.forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+setMode('suminagashi', true);
+
+function modeFadeTick(now) {
+  if (!modeFade) return;
+  const e = Math.min(1, (now - modeFade.t0) / modeFade.dur);
+  const s = e * e * (3 - 2 * e);
+  for (const k of Object.keys(modeFade.to)) {
+    const v = modeFade.from[k] + (modeFade.to[k] - modeFade.from[k]) * s;
+    SLIDER_MAP[k](v);
+    $(k).value = v;
+  }
+  if (e >= 1) modeFade = null;
+}
 
 /* ---------- write words as ink (言葉) ----------
    Rasterise the phrase offscreen, sample the glyph coverage into points,
@@ -997,6 +1064,7 @@ function frame() {
   const dt = Math.min(t - last, 1 / 30);
   last = t;
   if (dt <= 0) return;
+  modeFadeTick(t);
   textTick(t);
   washTick(dt);
   step(dt);
