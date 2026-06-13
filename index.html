@@ -23,6 +23,11 @@
     position:fixed; inset:0; width:100vw; height:100vh; display:block;
     touch-action:none; cursor:crosshair;
   }
+  /* 細筆 fineliner — a crisp 2D pen layer ON TOP of the fluid sim */
+  canvas#ink{
+    position:fixed; inset:0; width:100vw; height:100vh; display:block;
+    pointer-events:none;
+  }
 
   /* ---------- title ---------- */
   .title{
@@ -74,7 +79,7 @@
     opacity:1; transform:scale(1.12);
     box-shadow:0 0 0 3px rgba(250,247,240,1), 0 0 0 4.5px var(--ink-soft);
   }
-  /* white = light-reveal ink: a pale disc with a faint inner glow */
+  /* white ink swatch: a pale disc (the pigment is near-white) */
   .sw.light{
     background:radial-gradient(circle at 50% 42%, #ffffff 0%, #f3efe6 62%, #e4ded2 100%);
     box-shadow:inset 0 0 0 1px rgba(62,53,42,0.18);
@@ -218,6 +223,7 @@
 <body>
 
 <canvas id="c"></canvas>
+<canvas id="ink"></canvas>
 
 <aside class="title">
   <h1>墨流し</h1>
@@ -229,6 +235,7 @@
   <div class="modes">
     <button class="mode sel" data-mode="suminagashi">墨流し<span>SUMINAGASHI</span></button>
     <button class="mode" data-mode="painterly">水墨<span>PAINTERLY</span></button>
+    <button class="mode" data-tool="liner">細筆<span>FINELINER</span></button>
   </div>
   <span class="div"></span>
   <div class="swatches">
@@ -270,6 +277,8 @@
     <input type="range" id="sWet" min="0" max="1" step="0.001" value="0.85"></div>
   <div class="prow"><label><span class="jp">粒状</span><span class="en">GRANULATION · 水墨</span></label>
     <input type="range" id="sGran" min="0" max="1" step="0.001" value="0.55"></div>
+  <div class="prow"><label><span class="jp">遅延</span><span class="en">SMOOTHING · 細筆</span></label>
+    <input type="range" id="sSmooth" min="0" max="1" step="0.001" value="0.5"></div>
   <hr class="hair">
   <div class="ptitle">言葉<span>WRITE INK</span></div>
   <input id="textInput" type="text" maxlength="40" placeholder="言葉を墨に流す…" autocomplete="off" spellcheck="false">
@@ -332,6 +341,7 @@ const CFG = {
   /* 水墨 watercolour-on-paper model (see stepPaper / wetParams) */
   WETNESS: 0.85,         // master 水墨 wetness 0..1 (panel) — bleed, mixing, creep
   GRAN: 0.55,            // 水墨 granulation strength 0..1 (panel)
+  SMOOTH: 0.5,           // 細筆 fineliner pulled-string smoothing 0..1 (panel)
   PAPER_LOAD: 3.0,       // ceiling on pigment load → washes stay translucent
   PAPER_PASSES: SMALL ? 2 : 6,   // more passes/frame → the bleed reaches its end faster
 };
@@ -339,7 +349,9 @@ const CFG = {
 /* Pigments as per-channel absorption (optical density) vectors.
    The coloured inks derive their absorption from an editable hex colour
    (per-colour picker), so the palette is fully re-assignable. Sumi is its
-   own dense, slightly warm preset; white is the special light-reveal tool. */
+   own dense, slightly warm preset; white is an ordinary near-zero-absorption
+   pigment — it mixes subtractively like the rest and is simply (near-)invisible
+   on the pale paper/water, showing mainly when laid over darker colour. */
 function hexToRGB(hex){
   hex = hex.replace('#','');
   if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
@@ -365,7 +377,7 @@ const INKS = {
   turquoise: makeColorInk('#1fb6a6'),   // turquoise / teal (was green)
   yellow   : makeColorInk('#f2c14e'),   // warm yellow (was multicolor)
   black    : { kind:'black', a:[0.94, 1.00, 1.07], cap:4.5, strokeR:0.00030, strokeD:0.50, dropR:0.026, dropD:2.8, soft:0.16 },
-  white    : { kind:'white', cap:0,     strokeR:0.00060, strokeD:1.0, dropR:0.030, dropD:1.0, soft:0.30 },
+  white    : { kind:'color', hex:'#ffffff', a:[0.0, 0.0, 0.0], cap:1.2, strokeR:0.00090, strokeD:0.22, dropR:0.034, dropD:0.75, soft:0.60 },
 };
 
 /* ---------------- fullscreen pass plumbing ---------------- */
@@ -594,7 +606,6 @@ const FRAG_DISPLAY = /* glsl */`
   varying vec2 vUv;
   uniform sampler2D uDye;
   uniform float uAspect;
-  uniform vec2  uTexel;   // glow bloom step (a few dye texels)
   uniform float uMode;    // 0 = 墨流し ink-on-water, 1 = 水墨 watercolour wash
   uniform float uWetness; // 水墨 paper wetness (softens the dry-brush edges)
   uniform float uGran;    // 水墨 granulation strength (0 smooth → 1 mottled)
@@ -613,11 +624,6 @@ const FRAG_DISPLAY = /* glsl */`
     for (int i = 0; i < 5; i++){ v += a * vnoise(p); p *= 2.02; a *= 0.5; }
     return v;
   }
-  // negative density = light carved out by white ink → its magnitude is the glow
-  float glowAt(vec2 uv){
-    vec3 d = texture2D(uDye, uv).rgb;
-    return max(0.0, -(d.r + d.g + d.b) * 0.3333);
-  }
   void main(){
     vec4 d4  = texture2D(uDye, vUv);
     vec3 raw = d4.rgb;
@@ -628,19 +634,12 @@ const FRAG_DISPLAY = /* glsl */`
     vec3 col;
 
     if (uMode < 0.5) {
-      // ---- 墨流し : ink on water — Beer–Lambert density, white-reveal glow ----
+      // ---- 墨流し : ink on water — Beer–Lambert subtractive density ----
       vec3 density = max(raw, 0.0);
       float level = max(density.r, max(density.g, density.b));
       float gain  = pow(level, 1.45) / max(level, 1e-4);
       density = min(density * gain, vec3(6.5));
       col = paper * exp(-density);
-      vec2 e = uTexel;
-      float gb = glowAt(vUv + vec2(e.x, 0.0)) + glowAt(vUv - vec2(e.x, 0.0))
-               + glowAt(vUv + vec2(0.0, e.y)) + glowAt(vUv - vec2(0.0, e.y))
-               + glowAt(vUv + e) + glowAt(vUv - e)
-               + glowAt(vUv + vec2(e.x, -e.y)) + glowAt(vUv + vec2(-e.x, e.y));
-      float glow = glowAt(vUv) + gb * 0.125;
-      col += vec3(1.0, 0.975, 0.93) * glow * 1.3;
     } else {
       // ---- 水墨 : flat translucent watercolour wash on paper ----
       // num = Σ(absorptionᵢ·loadᵢ), W = Σloadᵢ. The hue is the LOAD-WEIGHTED
@@ -674,32 +673,6 @@ const FRAG_DISPLAY = /* glsl */`
     col *= 1.0 - 0.10 * dot(q, q);
     col += (hash(floor(gl_FragCoord.xy)) - 0.5) * 0.012;
     gl_FragColor = vec4(col, 1.0);
-  }
-`;
-
-/* ---- white light-reveal ink ----
-   White is not a pigment. It erodes whatever ink the stroke passes through
-   (revealing bright paper) and pushes the local density negative, which the
-   display reads as a luminous channel. Over blank paper there is nothing to
-   cut, so it stays near-invisible. */
-const FRAG_WHITE = /* glsl */`
-  varying vec2 vUv;
-  uniform sampler2D uTarget;
-  uniform float uAspect;
-  uniform vec2  uPoint;
-  uniform float uRadius;
-  uniform float uErode;
-  uniform float uGlow;
-  void main(){
-    vec2 p = vUv - uPoint; p.x *= uAspect;
-    float f = exp(-dot(p, p) / uRadius);
-    vec4 base = texture2D(uTarget, vUv);
-    vec3 rgb  = base.rgb;
-    float existing = max(rgb.r, max(rgb.g, rgb.b));
-    rgb *= (1.0 - clamp(uErode * f, 0.0, 1.0));               // displace the ink
-    rgb -= vec3(uGlow * f * smoothstep(0.02, 0.45, existing)); // carve light
-    // also lift the pigment load (alpha) so a watercolour wash thins to paper
-    gl_FragColor = vec4(rgb, base.a * (1.0 - clamp(uErode * f, 0.0, 1.0)));
   }
 `;
 
@@ -863,11 +836,7 @@ const matDrop = makeMat(FRAG_DROP, {
   uR:{value:0.04}, uColor:{value:v3()}, uSoft:{value:0.2},
 });
 const matScale   = makeMat(FRAG_SCALE,   { uTarget:{value:null}, uValue:{value:1} });
-const matDisplay = makeMat(FRAG_DISPLAY, { uDye:{value:null}, uAspect:{value:1}, uTexel:{value:v2()}, uMode:{value:0}, uWetness:{value:0.85}, uGran:{value:0.55} });
-const matWhite = makeMat(FRAG_WHITE, {
-  uTarget:{value:null}, uAspect:{value:1}, uPoint:{value:v2()},
-  uRadius:{value:0.001}, uErode:{value:0.6}, uGlow:{value:0.5},
-});
+const matDisplay = makeMat(FRAG_DISPLAY, { uDye:{value:null}, uAspect:{value:1}, uMode:{value:0}, uWetness:{value:0.85}, uGran:{value:0.55} });
 const matPaperDeposit = makeMat(FRAG_PAPER_DEPOSIT, {
   uTarget:{value:null}, uAspect:{value:1}, uPoint:{value:v2()},
   uRadius:{value:0.001}, uAbsorb:{value:v3()}, uAmt:{value:0.2}, uLoadCap:{value:3},
@@ -1001,20 +970,6 @@ function scalePass(fbo, value) {
   fbo.swap();
 }
 
-/* white light-reveal: erode existing ink and carve a luminous channel.
-   `amount` accumulates along a stroke, so a slow pass cuts more deeply. */
-function whiteStroke(x, y, radius, amount) {
-  const u = matWhite.uniforms;
-  u.uTarget.value = dye.read.texture;
-  u.uAspect.value = W / H;
-  u.uPoint.value.set(x, y);
-  u.uRadius.value = radius;
-  u.uErode.value = Math.min(0.92, 0.45 * amount + 0.30);
-  u.uGlow.value  = 0.55 * amount + 0.22;
-  blit(dye.write, matWhite);
-  dye.swap();
-}
-
 /* the master wetness slider scales every wet behaviour together */
 function wetParams() {
   const w = CFG.WETNESS;
@@ -1042,7 +997,6 @@ function wetDab(x, y, radius, wetAmt) {
 /* 水墨 paper deposit: pigment load into the dye field, wetness into its own
    field, no velocity — the mark stays where the brush put it. */
 function paperDeposit(x, y, ink, radius, amount) {
-  if (ink.kind === 'white') { whiteStroke(x, y, radius * 1.3, amount); return; }
   const wp = wetParams();
   const u = matPaperDeposit.uniforms;
   u.uTarget.value = dye.read.texture;
@@ -1177,7 +1131,6 @@ function stepPaper(dt) {
 function render() {
   matDisplay.uniforms.uDye.value = dye.read.texture;
   matDisplay.uniforms.uAspect.value = W / H;
-  matDisplay.uniforms.uTexel.value.set(dye.texel.x * 3.0, dye.texel.y * 3.0);
   matDisplay.uniforms.uMode.value = (mode === 'painterly') ? 1 : 0;
   matDisplay.uniforms.uWetness.value = CFG.WETNESS;
   matDisplay.uniforms.uGran.value = CFG.GRAN;
@@ -1188,6 +1141,7 @@ function render() {
 const nowS = () => performance.now() / 1000;
 let strokeInk = INKS.black;
 let mode = 'suminagashi';   // 'suminagashi' (ink on water) | 'painterly' (water-colour on paper)
+let tool = 'brush';         // 'brush' (fluid/pigment) | 'liner' (細筆 pen overlay)
 
 function pickInk() {
   return INKS[selected] || INKS.black;
@@ -1195,14 +1149,98 @@ function pickInk() {
 
 /* one brush dab — routed to the right surface model */
 function brushDab(x, y, ink, radius, amount) {
-  if (mode === 'painterly') {
-    paperDeposit(x, y, ink, radius, amount);
-  } else if (ink.kind === 'white') {
-    whiteStroke(x, y, radius, amount);
-  } else {
-    dyeSplat(x, y, ink, radius, amount);
-  }
+  if (mode === 'painterly') paperDeposit(x, y, ink, radius, amount);
+  else                      dyeSplat(x, y, ink, radius, amount);
 }
+
+/* ================= 細筆 FINELINER ==================================
+   A crisp pen layer on a separate 2D canvas, ON TOP of the fluid sim — it
+   does not touch the solver, never bleeds, and stays exactly where drawn.
+   Streamline smoothing makes it fluid; a slow 1D fBm offset perpendicular
+   to the path gives a gentle hand-drawn waver (not shaky jitter).        */
+const inkCanvas = document.getElementById('ink');
+const inkCtx = inkCanvas.getContext('2d');
+
+function lhash(n){ const s = Math.sin(n * 12.9898) * 43758.5453; return s - Math.floor(s); }
+function lnoise(x){ const i = Math.floor(x), f = x - i; const u = f * f * (3 - 2 * f); return lhash(i) * (1 - u) + lhash(i + 1) * u; }
+function fbm1(x){ return 0.62 * lnoise(x) + 0.38 * lnoise(x * 2.3 + 5.2); }   // gentle, low-freq
+
+function linerColor(){
+  const ink = INKS[selected];
+  if (ink && ink.hex) return ink.hex;          // a coloured ink (incl. white) → its hue, opaque
+  return '#211d1a';                            // 墨 sumi
+}
+
+const liner = { drawing:false, id:-1, dpr:1, w:2, lazyR:30, catch:0.6, sx:0, sy:0, pwx:0, pwy:0, mx:0, my:0, arc:0, seed:0 };
+
+function linerPx(e){
+  const r = inkCanvas.getBoundingClientRect();
+  return [(e.clientX - r.left) * inkCanvas.width / r.width,
+          (e.clientY - r.top)  * inkCanvas.height / r.height];
+}
+function linerDown(e){
+  if (liner.drawing) return;                   // one line at a time
+  const [x, y] = linerPx(e);
+  liner.drawing = true; liner.id = e.pointerId;
+  liner.dpr = inkCanvas.width / Math.max(1, innerWidth);
+  liner.w = (0.8 + CFG.BRUSH * 1.8) * liner.dpr;   // thickness ← BRUSH SIZE slider
+  liner.lazyR = (4 + CFG.SMOOTH * 80) * liner.dpr; // pulled-string length ← SMOOTHING slider
+  liner.catch = 0.85 - CFG.SMOOTH * 0.55;          // catch-up easing (lower = laggier trail)
+  liner.sx = x; liner.sy = y; liner.pwx = x; liner.pwy = y; liner.mx = x; liner.my = y;
+  liner.arc = 0; liner.seed = Math.random() * 1000;
+  inkCtx.strokeStyle = inkCtx.fillStyle = linerColor();
+  inkCtx.lineWidth = liner.w; inkCtx.lineCap = 'round'; inkCtx.lineJoin = 'round';
+  inkCtx.beginPath(); inkCtx.arc(x, y, liner.w * 0.5, 0, 6.28319); inkCtx.fill();   // touchdown dot
+}
+function linerStep(rawx, rawy){
+  // pulled-string ("lazy mouse"): the drawn point trails the pointer, held
+  // ~lazyR behind it, then eased in — quick moves become soft trailing curves
+  // and corners round off naturally.
+  const gx = rawx - liner.sx, gy = rawy - liner.sy;
+  const gd = Math.hypot(gx, gy);
+  let tx = liner.sx, ty = liner.sy;
+  if (gd > liner.lazyR) { const k = (gd - liner.lazyR) / gd; tx = liner.sx + gx * k; ty = liner.sy + gy * k; }
+  const nsx = liner.sx + (tx - liner.sx) * liner.catch;
+  const nsy = liner.sy + (ty - liner.sy) * liner.catch;
+  const dx = nsx - liner.sx, dy = nsy - liner.sy;
+  const d = Math.hypot(dx, dy);
+  if (d < 0.35) { liner.sx = nsx; liner.sy = nsy; return; }
+  liner.arc += d;
+  const nx = -dy / d, ny = dx / d;             // unit perpendicular to the path
+  const ph = liner.arc / liner.dpr;
+  // TWO scales of waver: a slow gentle wander + a fine high-frequency tremor
+  const slow  = (fbm1(ph * 0.008 + liner.seed) - 0.5) * 2.0 * (2.0 + CFG.BRUSH * 0.6) * liner.dpr;
+  const micro = (lnoise(ph * 0.075 + liner.seed * 1.7) - 0.5) * 2.0 * (0.6 + CFG.BRUSH * 0.2) * liner.dpr;
+  const off = slow + micro;
+  const wx = nsx + nx * off, wy = nsy + ny * off;
+  const mx = (liner.pwx + wx) * 0.5, my = (liner.pwy + wy) * 0.5;
+  inkCtx.beginPath();                          // smooth incremental quadratic through midpoints
+  inkCtx.moveTo(liner.mx, liner.my);
+  inkCtx.quadraticCurveTo(liner.pwx, liner.pwy, mx, my);
+  inkCtx.stroke();
+  liner.sx = nsx; liner.sy = nsy; liner.pwx = wx; liner.pwy = wy; liner.mx = mx; liner.my = my;
+}
+function linerMove(e){
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  for (const ev of evs){ const [x, y] = linerPx(ev); linerStep(x, y); }
+}
+function linerUp(e){
+  if (!liner.drawing || e.pointerId !== liner.id) return;
+  inkCtx.beginPath(); inkCtx.moveTo(liner.mx, liner.my); inkCtx.lineTo(liner.pwx, liner.pwy); inkCtx.stroke();
+  liner.drawing = false; liner.id = -1;
+}
+/* size the pen layer to match the WebGL canvas, preserving existing line work */
+function sizeInk(preserve){
+  let tmp = null;
+  if (preserve && inkCanvas.width){
+    tmp = document.createElement('canvas');
+    tmp.width = inkCanvas.width; tmp.height = inkCanvas.height;
+    tmp.getContext('2d').drawImage(inkCanvas, 0, 0);
+  }
+  inkCanvas.width = W; inkCanvas.height = H;
+  if (tmp) inkCtx.drawImage(tmp, 0, 0, tmp.width, tmp.height, 0, 0, W, H);
+}
+function clearInk(){ inkCtx.clearRect(0, 0, inkCanvas.width, inkCanvas.height); }
 
 const pointers = new Map();
 function uvFromEvent(e) {
@@ -1213,6 +1251,7 @@ function uvFromEvent(e) {
 canvas.addEventListener('pointerdown', e => {
   e.preventDefault();
   canvas.setPointerCapture(e.pointerId);
+  if (tool === 'liner') { linerDown(e); return; }
   const [x, y] = uvFromEvent(e);
   strokeInk = pickInk();
   pointers.set(e.pointerId, { x, y, dist:0, dirx:0, diry:0, lastR:0, started:false });
@@ -1224,6 +1263,10 @@ canvas.addEventListener('pointerdown', e => {
 });
 
 canvas.addEventListener('pointermove', e => {
+  if (tool === 'liner') {
+    if (liner.drawing && e.pointerId === liner.id) { e.preventDefault(); linerMove(e); }
+    return;
+  }
   const p = pointers.get(e.pointerId);
   if (!p) return;
   e.preventDefault();
@@ -1274,10 +1317,6 @@ canvas.addEventListener('pointermove', e => {
    the traditional gesture, so tapping in place draws concentric rings. */
 const lastTap = { x:-1, y:-1, t:-10, n:0 };
 function dropAlternate(x, y) {
-  if (strokeInk.kind === 'white') {     // white carves light, it never drops a ring
-    whiteStroke(x, y, strokeInk.dropR * CFG.BRUSH, 0.9 * CFG.INK_AMT);
-    return;
-  }
   const t = nowS();
   const near = Math.hypot(x - lastTap.x, y - lastTap.y) < 0.12 && t - lastTap.t < 5;
   lastTap.n = near ? lastTap.n + 1 : 0;
@@ -1291,6 +1330,7 @@ function dropAlternate(x, y) {
 }
 
 function endPointer(e) {
+  if (tool === 'liner') { linerUp(e); return; }
   const p = pointers.get(e.pointerId);
   if (!p) return;
   if (p.dist < 0.01) {
@@ -1303,7 +1343,7 @@ function endPointer(e) {
       // a tap on water: a drop that displaces what was there (marbling rings)
       dropAlternate(p.x, p.y);
     }
-  } else if (mode === 'painterly' && strokeInk.kind !== 'white') {
+  } else if (mode === 'painterly') {
     // lifting the brush: wet pigment keeps wicking FORWARD along the stroke,
     // then dries and settles — not an abrupt hard stop
     wetTongue(p.x, p.y, p.dirx, p.diry, Math.max(p.lastR, 0.0008) * 2.2);
@@ -1330,6 +1370,7 @@ function washTick(dt) {
     scalePass(wet, 0);
     scalePass(velocity, 0);
     scalePass(pressure, 0);
+    clearInk();              // wash away the pen layer too
   }
 }
 
@@ -1410,6 +1451,7 @@ const SLIDER_MAP = {
   sDiff:  s => { CFG.MC_CORRECT = 0.5 * (1 - s); },
   sWet:   s => { CFG.WETNESS    = s; },
   sGran:  s => { CFG.GRAN       = s; },
+  sSmooth:s => { CFG.SMOOTH     = s; },
 };
 for (const id of Object.keys(SLIDER_MAP)) {
   $(id).addEventListener('input', e => {
@@ -1424,11 +1466,12 @@ for (const id of Object.keys(SLIDER_MAP)) {
    水墨: water-colour on paper — pigment stays put and bleeds a short way,
    permanent. The slider values still set the shared brush/ink feel.        */
 const MODES = {
-  suminagashi: { sStiff:0.71, sLife:1.00, sBrush:0.23, sInk:0.32, sDiff:0.00, sWet:0.85, sGran:0.55 },
-  painterly:   { sStiff:0.50, sLife:1.00, sBrush:0.40, sInk:0.50, sDiff:0.00, sWet:0.85, sGran:0.55 },
+  suminagashi: { sStiff:0.71, sLife:1.00, sBrush:0.23, sInk:0.32, sDiff:0.00, sWet:0.85, sGran:0.55, sSmooth:0.5 },
+  painterly:   { sStiff:0.50, sLife:1.00, sBrush:0.40, sInk:0.50, sDiff:0.00, sWet:0.85, sGran:0.55, sSmooth:0.5 },
 };
 let modeFade = null;
-const modeEls = [...document.querySelectorAll('.mode')];
+const modeEls = [...document.querySelectorAll('.mode[data-mode]')];   // the two wash surfaces
+const toolEls = [...document.querySelectorAll('.mode')];              // + 細筆 fineliner
 function setMode(name, instant) {
   if (name === 'painterly' && mode !== 'painterly') dryPaper(); // start on a dry sheet
   mode = name;
@@ -1442,7 +1485,12 @@ function setMode(name, instant) {
   for (const k of Object.keys(to)) from[k] = parseFloat($(k).value);
   modeFade = { from, to, t0: nowS(), dur: 1.4 };
 }
-modeEls.forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+toolEls.forEach(b => b.addEventListener('click', () => {
+  liner.drawing = false; liner.id = -1;               // cancel any in-progress line
+  toolEls.forEach(x => x.classList.toggle('sel', x === b));
+  if (b.dataset.tool === 'liner') tool = 'liner';     // pen overlay; sim keeps running underneath
+  else { tool = 'brush'; setMode(b.dataset.mode); }
+}));
 setMode('suminagashi', true);
 
 function modeFadeTick(now) {
@@ -1548,12 +1596,13 @@ textInput.addEventListener('keydown', e => {
 let resizeTimer = 0;
 window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => { viewSize(); initFBOs(true); }, 220);
+  resizeTimer = setTimeout(() => { viewSize(); initFBOs(true); sizeInk(true); }, 220);
 });
 
 /* ---------------- main loop ---------------- */
 viewSize();
 initFBOs(false);
+sizeInk(false);
 
 let last = nowS();
 function frame() {
