@@ -101,22 +101,30 @@
     .sw .edit{ width:22px; height:22px; top:-9px; right:-9px; font-size:12px; }
   }
   .pill .div{ width:1px; height:18px; background:rgba(62,53,42,0.18); }
+  /* English label primary (big, on top); Japanese secondary (small, below).
+     column-reverse lifts the <span> above the button's own text node. */
   .txt{
-    font-family:'Zen Old Mincho',serif; font-weight:400; font-size:12.5px;
-    letter-spacing:0.3em; color:var(--ink-soft);
-    background:none; border:none; cursor:pointer; padding:4px 2px 4px 4px;
+    display:flex; flex-direction:column-reverse; align-items:center; gap:1px;
+    font-family:'Zen Old Mincho',serif; font-weight:400; font-size:8px;
+    letter-spacing:.14em; color:var(--ink-soft);
+    background:none; border:none; cursor:pointer; padding:3px 4px;
     transition:color .3s;
+  }
+  .txt span{
+    font:400 9.5px 'Inter',sans-serif; letter-spacing:.12em;
+    text-transform:uppercase; color:inherit;
   }
   .txt:hover{ color:var(--ink); }
   .modes{ display:flex; align-items:center; gap:14px; }
   .mode{
-    display:flex; flex-direction:column; align-items:center; gap:2px;
+    display:flex; flex-direction:column-reverse; align-items:center; gap:1px;
     background:none; border:none; cursor:pointer; padding:2px 1px;
-    font-family:'Zen Old Mincho',serif; font-size:12px; letter-spacing:.2em;
+    font-family:'Zen Old Mincho',serif; font-size:8px; letter-spacing:.12em;
     color:var(--ink-faint); transition:color .35s;
   }
   .mode span{
-    font:300 5.5px 'Inter',sans-serif; letter-spacing:.3em; color:inherit;
+    font:400 9.5px 'Inter',sans-serif; letter-spacing:.1em;
+    text-transform:uppercase; color:inherit;
   }
   .mode:hover{ color:var(--ink-soft); }
   .mode.sel{ color:var(--ink); }
@@ -158,18 +166,20 @@
     user-select:none;
   }
   .panel.open{ opacity:1; transform:none; pointer-events:auto; }
+  /* English primary, Japanese a small accent before it */
   .ptitle{
-    font-family:'Zen Old Mincho',serif; font-size:12px; letter-spacing:.34em;
-    color:var(--ink); margin-bottom:6px;
+    font-family:'Zen Old Mincho',serif; font-size:8px; letter-spacing:.24em;
+    color:var(--ink-faint); margin-bottom:6px;
   }
   .ptitle span{
-    font:300 7px 'Inter',sans-serif; letter-spacing:.34em;
-    color:var(--ink-faint); margin-left:10px; vertical-align:1px;
+    font:400 11px 'Inter',sans-serif; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--ink); margin-left:9px; vertical-align:0;
   }
   .prow{ display:flex; align-items:center; gap:14px; margin:11px 0; }
-  .prow label{ width:84px; display:flex; flex-direction:column; gap:1px; }
-  .prow .jp{ font-family:'Zen Old Mincho',serif; font-size:11.5px; letter-spacing:.22em; color:var(--ink-soft); }
-  .prow .en{ font:300 6.5px 'Inter',sans-serif; letter-spacing:.3em; color:var(--ink-faint); }
+  /* column-reverse → the English (.en) sits on top, the Japanese (.jp) below */
+  .prow label{ width:98px; display:flex; flex-direction:column-reverse; gap:0; }
+  .prow .jp{ font-family:'Zen Old Mincho',serif; font-size:7px; letter-spacing:.16em; color:var(--ink-faint); white-space:nowrap; }
+  .prow .en{ font:400 9px 'Inter',sans-serif; letter-spacing:.1em; color:var(--ink-soft); white-space:nowrap; }
   .panel input[type=range]{
     -webkit-appearance:none; appearance:none; flex:1; height:16px;
     background:transparent; cursor:pointer; margin:0;
@@ -212,8 +222,8 @@
       max-width:calc(100vw - 24px); border-radius:24px;
     }
     .modes{ gap:10px; }
-    .mode{ font-size:11px; }
-    .txt{ font-size:11.5px; letter-spacing:.22em; }
+    .mode, .txt{ font-size:8px; }
+    .mode span, .txt span{ font-size:9px; }
     .credit{ right:16px; bottom:20px; }
     #gearBtn{ top:16px; right:16px; }
     .panel{ top:62px; right:16px; width:min(272px, calc(100vw - 32px)); }
@@ -235,6 +245,7 @@
   <div class="modes">
     <button class="mode sel" data-mode="suminagashi">墨流し<span>SUMINAGASHI</span></button>
     <button class="mode" data-mode="painterly">水墨<span>PAINTERLY</span></button>
+    <button class="mode" data-tool="swirl">渦<span>SWIRL</span></button>
     <button class="mode" data-tool="liner">細筆<span>FINELINER</span></button>
   </div>
   <span class="div"></span>
@@ -244,11 +255,14 @@
     <button class="sw recolor" data-ink="sky"        style="--c:#5cc8ee" aria-label="空 sky blue"><span class="edit">✎</span></button>
     <button class="sw recolor" data-ink="turquoise"  style="--c:#1fb6a6" aria-label="碧 turquoise"><span class="edit">✎</span></button>
     <button class="sw recolor" data-ink="yellow"      style="--c:#f2c14e" aria-label="黄 yellow"><span class="edit">✎</span></button>
-    <button class="sw light" data-ink="white" aria-label="光 white · light"></button>
+    <button class="sw light" data-ink="white" aria-label="白 white"></button>
   </div>
   <span class="div"></span>
-  <button id="washBtn" class="txt">洗い流す</button>
+  <button id="importBtn" class="txt">画像<span>IMAGE</span></button>
+  <button id="washBtn" class="txt">洗い流す<span>CLEAR</span></button>
 </nav>
+<input id="imgPicker" type="file" accept="image/*" style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none">
+
 
 <div class="credit">THREE.JS&ensp;·&ensp;STABLE&nbsp;FLUIDS</div>
 <div id="nogl">WEBGL UNAVAILABLE</div>
@@ -676,6 +690,52 @@ const FRAG_DISPLAY = /* glsl */`
   }
 `;
 
+/* ---- white pigment (covering) ----
+   White is an ordinary covering pigment: where the brush passes it pushes the
+   local density down toward paper-white. On empty paper there is nothing to
+   cover (already ~zero density), so it reads as near-invisible; over darker
+   ink it lays an actual lightening/white smear that the solver then advects. */
+const FRAG_WHITE = /* glsl */`
+  varying vec2 vUv;
+  uniform sampler2D uTarget;
+  uniform float uAspect;
+  uniform vec2  uPoint;
+  uniform float uRadius;
+  uniform float uAmt;
+  void main(){
+    vec2 p = vUv - uPoint; p.x *= uAspect;
+    float f = exp(-dot(p, p) / uRadius);
+    vec4 base = texture2D(uTarget, vUv);
+    float cover = clamp(uAmt * f, 0.0, 1.0);
+    gl_FragColor = vec4(base.rgb * (1.0 - cover), base.a);
+  }
+`;
+
+/* ---- image seed ----
+   Pre-fills the dye/density field from a loaded photo: contain-fit centred
+   (letterboxed), pixels converted to Beer–Lambert absorption so the display
+   reproduces the image's colours, which the fluid solver then advects. */
+const FRAG_IMAGE = /* glsl */`
+  varying vec2 vUv;
+  uniform sampler2D uImage;
+  uniform float uCanvasAspect;
+  uniform float uImageAspect;
+  uniform vec3  uPaper;
+  void main(){
+    float dw, dh;
+    if (uImageAspect > uCanvasAspect) { dw = uCanvasAspect; dh = uCanvasAspect / uImageAspect; }
+    else                              { dh = 1.0; dw = uImageAspect; }
+    vec2 q = vec2((vUv.x - 0.5) * uCanvasAspect, vUv.y - 0.5);
+    vec2 iuv = vec2(q.x / dw + 0.5, 0.5 - q.y / dh);
+    vec3 dens = vec3(0.0);
+    if (iuv.x >= 0.0 && iuv.x <= 1.0 && iuv.y >= 0.0 && iuv.y <= 1.0) {
+      vec3 c = clamp(texture2D(uImage, iuv).rgb, 0.004, 1.0);
+      dens = max(-log(c / uPaper), 0.0);   // paper * exp(-dens) ≈ original colour
+    }
+    gl_FragColor = vec4(dens, 1.0);
+  }
+`;
+
 /* paper permeability / tooth — a fixed multi-scale grain shared by the
    deposit (dry-brush gaps) and the bleed steps */
 const PERM_GLSL = /* glsl */`
@@ -837,6 +897,12 @@ const matDrop = makeMat(FRAG_DROP, {
 });
 const matScale   = makeMat(FRAG_SCALE,   { uTarget:{value:null}, uValue:{value:1} });
 const matDisplay = makeMat(FRAG_DISPLAY, { uDye:{value:null}, uAspect:{value:1}, uMode:{value:0}, uWetness:{value:0.85}, uGran:{value:0.55} });
+const matWhite = makeMat(FRAG_WHITE, {
+  uTarget:{value:null}, uAspect:{value:1}, uPoint:{value:v2()}, uRadius:{value:0.001}, uAmt:{value:0.6},
+});
+const matImage = makeMat(FRAG_IMAGE, {
+  uImage:{value:null}, uCanvasAspect:{value:1}, uImageAspect:{value:1}, uPaper:{value:v3()},
+});
 const matPaperDeposit = makeMat(FRAG_PAPER_DEPOSIT, {
   uTarget:{value:null}, uAspect:{value:1}, uPoint:{value:v2()},
   uRadius:{value:0.001}, uAbsorb:{value:v3()}, uAmt:{value:0.2}, uLoadCap:{value:3},
@@ -930,6 +996,17 @@ function applySplat(fbo, x, y, radius, color, cap) {
 function dyeSplat(x, y, ink, radius, amount) {
   applySplat(dye, x, y, radius,
     [ink.a[0] * amount, ink.a[1] * amount, ink.a[2] * amount], ink.cap);
+}
+/* white covering pigment: push the local density down toward paper-white */
+function whiteCover(x, y, radius, amount) {
+  const u = matWhite.uniforms;
+  u.uTarget.value = dye.read.texture;
+  u.uAspect.value = W / H;
+  u.uPoint.value.set(x, y);
+  u.uRadius.value = radius;
+  u.uAmt.value = Math.min(1.0, amount * 2.2);
+  blit(dye.write, matWhite);
+  dye.swap();
 }
 function velSplat(x, y, vx, vy, radius = CFG.VEL_RADIUS) {
   applySplat(velocity, x, y, radius, [vx, vy, 0], CFG.VEL_CAP);
@@ -1150,7 +1227,8 @@ function pickInk() {
 /* one brush dab — routed to the right surface model */
 function brushDab(x, y, ink, radius, amount) {
   if (mode === 'painterly') paperDeposit(x, y, ink, radius, amount);
-  else                      dyeSplat(x, y, ink, radius, amount);
+  else if (ink === INKS.white) whiteCover(x, y, radius, amount);  // ink mode: covering white
+  else dyeSplat(x, y, ink, radius, amount);
 }
 
 /* ================= 細筆 FINELINER ==================================
@@ -1255,6 +1333,7 @@ canvas.addEventListener('pointerdown', e => {
   const [x, y] = uvFromEvent(e);
   strokeInk = pickInk();
   pointers.set(e.pointerId, { x, y, dist:0, dirx:0, diry:0, lastR:0, started:false });
+  if (tool === 'swirl') return;          // swirl adds no dye — just track for velocity
   const b2 = CFG.BRUSH * CFG.BRUSH;
   // 水墨: the brush enters small (a fine point), as a Japanese brush does
   const r0 = mode === 'painterly' ? strokeInk.strokeR * 0.9 * b2 : strokeInk.strokeR * 2.2 * b2;
@@ -1278,6 +1357,14 @@ canvas.addEventListener('pointermove', e => {
     if (len < 1e-5) continue;
     p.dist += len;
     const b2 = CFG.BRUSH * CFG.BRUSH;
+    if (tool === 'swirl') {
+      // pure velocity — pushes / curls existing ink & images, adds no colour.
+      // Strength follows INK AMOUNT, footprint follows BRUSH SIZE.
+      const strength = CFG.FORCE * (0.6 + 0.7 * CFG.INK_AMT);
+      velSplat(x, y, dx * strength, dy * strength, CFG.VEL_RADIUS * b2);
+      p.x = x; p.y = y;
+      continue;
+    }
     if (mode === 'painterly') {
       // water-colour on paper: deposit pigment along the path, no velocity —
       // the mark stays where it is painted and only bleeds a short way.
@@ -1331,6 +1418,7 @@ function dropAlternate(x, y) {
 
 function endPointer(e) {
   if (tool === 'liner') { linerUp(e); return; }
+  if (tool === 'swirl') { pointers.delete(e.pointerId); return; }  // no tap/drop for swirl
   const p = pointers.get(e.pointerId);
   if (!p) return;
   if (p.dist < 0.01) {
@@ -1429,6 +1517,44 @@ swEls.forEach(el => {
 
 document.getElementById('washBtn').addEventListener('click', startWash);
 
+/* ---------- import an image as ink (写真を墨に) ----------
+   Seeds the dye/density field with the photo's pixels (contain-fit, centred),
+   converted to absorption, so painting / swirling then drags and dissolves it. */
+const imgPicker = document.getElementById('imgPicker');
+document.getElementById('importBtn').addEventListener('click', () => imgPicker.click());
+imgPicker.addEventListener('change', () => {
+  const file = imgPicker.files && imgPicker.files[0];
+  if (file) importImage(file);
+  imgPicker.value = '';   // allow re-importing the same file
+});
+function importImage(file) {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    // imported ink lives on the water surface — make sure we're in ink mode
+    if (mode !== 'suminagashi') setMode('suminagashi');
+    tool = 'brush';
+    toolEls.forEach(x => x.classList.toggle('sel', x.dataset.mode === 'suminagashi'));
+
+    if (matImage.uniforms.uImage.value) matImage.uniforms.uImage.value.dispose();
+    const tex = new THREE.Texture(img);
+    tex.colorSpace = THREE.LinearSRGBColorSpace;   // sample raw display-space values
+    tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false; tex.flipY = false; tex.needsUpdate = true;
+
+    const u = matImage.uniforms;
+    u.uImage.value = tex;
+    u.uCanvasAspect.value = W / H;
+    u.uImageAspect.value = img.width / Math.max(1, img.height);
+    u.uPaper.value.set(0.964, 0.951, 0.915);
+    blit(dye.write, matImage); dye.swap();          // seed the dye field
+    scalePass(velocity, 0); scalePass(wet, 0);      // sit still, dry
+    URL.revokeObjectURL(url);
+  };
+  img.onerror = () => URL.revokeObjectURL(url);
+  img.src = url;
+}
+
 /* ---------- tuning panel ---------- */
 const gearBtn = document.getElementById('gearBtn');
 const panel = document.getElementById('panel');
@@ -1471,7 +1597,7 @@ const MODES = {
 };
 let modeFade = null;
 const modeEls = [...document.querySelectorAll('.mode[data-mode]')];   // the two wash surfaces
-const toolEls = [...document.querySelectorAll('.mode')];              // + 細筆 fineliner
+const toolEls = [...document.querySelectorAll('.mode')];              // + 渦 swirl, 細筆 fineliner
 function setMode(name, instant) {
   if (name === 'painterly' && mode !== 'painterly') dryPaper(); // start on a dry sheet
   mode = name;
@@ -1487,9 +1613,11 @@ function setMode(name, instant) {
 }
 toolEls.forEach(b => b.addEventListener('click', () => {
   liner.drawing = false; liner.id = -1;               // cancel any in-progress line
-  toolEls.forEach(x => x.classList.toggle('sel', x === b));
-  if (b.dataset.tool === 'liner') tool = 'liner';     // pen overlay; sim keeps running underneath
+  const t = b.dataset.tool;
+  if (t === 'liner') tool = 'liner';                  // pen overlay; sim keeps running underneath
+  else if (t === 'swirl') { tool = 'swirl'; if (mode !== 'suminagashi') setMode('suminagashi'); }
   else { tool = 'brush'; setMode(b.dataset.mode); }
+  toolEls.forEach(x => x.classList.toggle('sel', x === b));   // highlight AFTER any setMode
 }));
 setMode('suminagashi', true);
 
