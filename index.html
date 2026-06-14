@@ -84,6 +84,15 @@
     background:radial-gradient(circle at 50% 42%, #ffffff 0%, #f3efe6 62%, #e4ded2 100%);
     box-shadow:inset 0 0 0 1px rgba(62,53,42,0.18);
   }
+  /* eraser swatch: a pale disc bearing a small eraser glyph */
+  .sw.eraser{
+    background:radial-gradient(circle at 50% 42%, #fbf8f1 0%, #efe9dd 70%, #ded6c6 100%);
+    box-shadow:inset 0 0 0 1px rgba(62,53,42,0.18);
+    display:grid; place-items:center; color:var(--ink-faint);
+  }
+  .sw.eraser svg{ width:15px; height:15px; }
+  .sw.eraser:hover{ color:var(--ink-soft); }
+  .sw.eraser.sel{ color:var(--ink); }
   /* per-colour edit affordance (desktop hover only) */
   .sw .edit{
     position:absolute; top:-8px; right:-8px; width:20px; height:20px; border-radius:50%;
@@ -93,7 +102,26 @@
     opacity:0; pointer-events:none; transition:opacity .25s; transform:scale(.8);
   }
   @media (hover:hover){ .sw:hover .edit{ opacity:1; pointer-events:auto; transform:scale(1); } }
-  #inkPicker{ position:fixed; width:1px; height:1px; opacity:0; border:0; padding:0; pointer-events:none; }
+  /* Native colour popups anchor over the element that opened them. A real,
+     swatch-sized transparent box makes that anchor reliable — with a 1px box
+     the browser would occasionally drop the picker in the top-left corner. */
+  #inkPicker, #bgPicker{ position:fixed; left:0; top:0; width:28px; height:28px; opacity:0; border:0; padding:0; pointer-events:none; z-index:60; }
+  /* ---- background swatches (panel) ---- */
+  .bgrow{ display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin:10px 0 2px; }
+  .bg{
+    position:relative; width:22px; height:22px; border-radius:50%; border:none; cursor:pointer;
+    background:var(--b); padding:0;
+    box-shadow:inset 0 0 0 1px rgba(62,53,42,0.18);
+    transition:transform .25s, box-shadow .25s;
+  }
+  .bg::before{ content:""; position:absolute; inset:-6px; border-radius:50%; }
+  .bg:hover{ transform:scale(1.1); }
+  .bg.sel{ box-shadow:0 0 0 2px rgba(250,247,240,1), 0 0 0 3.5px var(--ink-soft); }
+  .bg.custom{ background:conic-gradient(from 210deg, #e8722e, #f2c14e, #1fb6a6, #5cc8ee, #b07cd6, #e8722e); }
+  .bg.custom .edit{
+    position:absolute; inset:0; display:grid; place-items:center;
+    color:#fff; font-size:11px; text-shadow:0 1px 2px rgba(0,0,0,.45);
+  }
   /* even larger finger targets on touch devices */
   @media (pointer:coarse){
     .swatches{ gap:18px; }
@@ -135,6 +163,13 @@
     font:300 8.5px 'Inter',sans-serif; letter-spacing:0.34em;
     color:var(--ink-faint); user-select:none; pointer-events:none;
   }
+
+  /* on a dark ground the title & credit float directly on the canvas — lift
+     them to a light ink so they stay legible (pill/panel have their own ground) */
+  body.darkground .title h1{ color:#ece6da; }
+  body.darkground .title .latin{ color:#b8b0a1; }
+  body.darkground .title .latin span{ color:#8f8676; }
+  body.darkground .credit{ color:#7d7567; }
 
   #nogl{
     position:fixed; inset:0; display:none; place-items:center;
@@ -256,9 +291,16 @@
     <button class="sw recolor" data-ink="turquoise"  style="--c:#1fb6a6" aria-label="碧 turquoise"><span class="edit">✎</span></button>
     <button class="sw recolor" data-ink="yellow"      style="--c:#f2c14e" aria-label="黄 yellow"><span class="edit">✎</span></button>
     <button class="sw light" data-ink="white" aria-label="白 white"></button>
+    <button class="sw eraser" data-ink="eraser" aria-label="消しゴム eraser">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7 18.5 L3.7 15.2 a2 2 0 0 1 0-2.8 L12 4.1 a2 2 0 0 1 2.8 0 L20.3 9.6 a2 2 0 0 1 0 2.8 L13.5 18.5 Z"/>
+        <line x1="7" y1="18.5" x2="20" y2="18.5"/>
+      </svg>
+    </button>
   </div>
   <span class="div"></span>
   <button id="importBtn" class="txt">画像<span>IMAGE</span></button>
+  <button id="saveBtn" class="txt">保存<span>SAVE</span></button>
   <button id="washBtn" class="txt">洗い流す<span>CLEAR</span></button>
 </nav>
 <input id="imgPicker" type="file" accept="image/*" style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none">
@@ -294,6 +336,18 @@
   <div class="prow"><label><span class="jp">遅延</span><span class="en">SMOOTHING · 細筆</span></label>
     <input type="range" id="sSmooth" min="0" max="1" step="0.001" value="0.5"></div>
   <hr class="hair">
+  <div class="ptitle">地<span>BACKGROUND</span></div>
+  <div class="bgrow" id="bgRow">
+    <button class="bg sel" data-bg="#f6f2e9" style="--b:#f6f2e9" aria-label="生成 paper"></button>
+    <button class="bg" data-bg="#14110d" style="--b:#14110d" aria-label="墨 black"></button>
+    <button class="bg" data-bg="#f6dde4" style="--b:#f6dde4" aria-label="桜 sakura"></button>
+    <button class="bg" data-bg="#dce8f0" style="--b:#dce8f0" aria-label="水 mizu"></button>
+    <button class="bg" data-bg="#e4ecd9" style="--b:#e4ecd9" aria-label="若葉 wakaba"></button>
+    <button class="bg" data-bg="#efe0cf" style="--b:#efe0cf" aria-label="砂 suna"></button>
+    <button class="bg" data-bg="#e7e0ee" style="--b:#e7e0ee" aria-label="藤 fuji"></button>
+    <button class="bg custom" id="bgCustom" aria-label="任意 custom colour"><span class="edit">✎</span></button>
+  </div>
+  <hr class="hair">
   <div class="ptitle">言葉<span>WRITE INK</span></div>
   <input id="textInput" type="text" maxlength="40" placeholder="言葉を墨に流す…" autocomplete="off" spellcheck="false">
   <div class="prow"><label><span class="jp">字大</span><span class="en">TEXT SIZE</span></label>
@@ -304,6 +358,7 @@
 </aside>
 
 <input id="inkPicker" type="color" aria-label="recolour swatch">
+<input id="bgPicker" type="color" aria-label="background colour">
 
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
@@ -392,6 +447,7 @@ const INKS = {
   yellow   : makeColorInk('#f2c14e'),   // warm yellow (was multicolor)
   black    : { kind:'black', a:[0.94, 1.00, 1.07], cap:4.5, strokeR:0.00030, strokeD:0.50, dropR:0.026, dropD:2.8, soft:0.16 },
   white    : { kind:'color', hex:'#ffffff', a:[0.0, 0.0, 0.0], cap:1.2, strokeR:0.00090, strokeD:0.22, dropR:0.034, dropD:0.75, soft:0.60 },
+  eraser   : { kind:'eraser', a:[0.0, 0.0, 0.0], cap:1.0, strokeR:0.00160, strokeD:0.85, dropR:0.034, dropD:0.85, soft:0.50 },
 };
 
 /* ---------------- fullscreen pass plumbing ---------------- */
@@ -558,10 +614,12 @@ const FRAG_SPLAT = /* glsl */`
     vec2 p = vUv - uPoint;
     p.x *= uAspect;
     vec3 splat = exp(-dot(p, p) / uRadius) * uColor;
-    vec3 base  = texture2D(uTarget, vUv).xyz;
+    vec4 tex   = texture2D(uTarget, vUv);
+    vec3 base  = tex.xyz;
     // never reduce what is already there — a light ink over dark sumi
-    // saturates at its own cap instead of bleaching the sumi
-    gl_FragColor = vec4(min(base + splat, max(base, uCap)), 1.0);
+    // saturates at its own cap instead of bleaching the sumi.
+    // PRESERVE alpha: it is the 水墨 pigment load, not touched by ink-on-water.
+    gl_FragColor = vec4(min(base + splat, max(base, uCap)), tex.a);
   }
 `;
 
@@ -600,7 +658,7 @@ const FRAG_DROP = /* glsl */`
     if (d < uR) {
       float edge   = smoothstep(uR * (1.0 - uSoft), uR, d);
       vec3 rimCol  = texture2D(uTarget, uPoint).rgb;
-      gl_FragColor = vec4(mix(uColor, rimCol, edge), 1.0);
+      gl_FragColor = vec4(mix(uColor, rimCol, edge), 0.0);   // no 水墨 load
     } else {
       float dd = sqrt(d * d - uR * uR);
       vec2 q   = uPoint + p * (dd / d) / vec2(uAspect, 1.0);
@@ -619,10 +677,12 @@ const FRAG_SCALE = /* glsl */`
 const FRAG_DISPLAY = /* glsl */`
   varying vec2 vUv;
   uniform sampler2D uDye;
+  uniform sampler2D uWhite; // opaque white pigment load (墨流し)
   uniform float uAspect;
   uniform float uMode;    // 0 = 墨流し ink-on-water, 1 = 水墨 watercolour wash
   uniform float uWetness; // 水墨 paper wetness (softens the dry-brush edges)
   uniform float uGran;    // 水墨 granulation strength (0 smooth → 1 mottled)
+  uniform vec3  uPaper;   // background / paper colour (selectable)
   float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
   float vnoise(vec2 p){
     vec2 i = floor(p), f = fract(p);
@@ -642,9 +702,14 @@ const FRAG_DISPLAY = /* glsl */`
     vec4 d4  = texture2D(uDye, vUv);
     vec3 raw = d4.rgb;
     vec2 pc  = vec2(vUv.x * uAspect, vUv.y);
-    vec3 paper = vec3(0.964, 0.951, 0.915);
+    vec3 paper = uPaper;
     float mottle = vnoise(pc * 6.0) * 0.6 + vnoise(pc * 18.0) * 0.4;
     paper *= 0.994 + 0.012 * mottle;
+    // EMISSIVE REVEAL: the subtractive model multiplies ink THROUGH the paper,
+    // so on a dark ground everything would collapse to black. Blend in each
+    // pigment's own body colour, weighted by how dark the chosen background is
+    // (≈0 for paper / pastels → the classic light-ground look is untouched).
+    float bgDark = smoothstep(0.0, 0.55, 1.0 - dot(uPaper, vec3(0.299, 0.587, 0.114)));
     vec3 col;
 
     if (uMode < 0.5) {
@@ -654,6 +719,14 @@ const FRAG_DISPLAY = /* glsl */`
       float gain  = pow(level, 1.45) / max(level, 1e-4);
       density = min(density * gain, vec3(6.5));
       col = paper * exp(-density);
+      // pigment body colour (its reflected hue) so colour stays visible on a
+      // dark ground; sumi reconstructs to a deep near-black, colours to their hue.
+      float mx   = max(density.r, max(density.g, density.b));
+      vec3  body = exp(-(density / max(mx, 1e-4)) * 1.7);
+      col += body * (1.0 - exp(-mx)) * bgDark;
+      // opaque white pigment laid over the subtractive result (its own field)
+      float wCov = 1.0 - exp(-texture2D(uWhite, vUv).r * 1.3);
+      col = mix(col, vec3(0.99, 0.986, 0.976), clamp(wCov, 0.0, 1.0));
     } else {
       // ---- 水墨 : flat translucent watercolour wash on paper ----
       // num = Σ(absorptionᵢ·loadᵢ), W = Σloadᵢ. The hue is the LOAD-WEIGHTED
@@ -681,6 +754,7 @@ const FRAG_DISPLAY = /* glsl */`
       cov *= 1.0 - dryAmt * rim * (1.0 - fbm(pc * 11.0));
       cov = clamp(cov, 0.0, 0.88);
       col = mix(paper, paper * tint, cov);
+      col += tint * cov * bgDark;   // reveal the wash colour on a dark ground
     }
 
     vec2 q = vUv - 0.5;
@@ -690,11 +764,11 @@ const FRAG_DISPLAY = /* glsl */`
   }
 `;
 
-/* ---- white pigment (covering) ----
-   White is an ordinary covering pigment: where the brush passes it pushes the
-   local density down toward paper-white. On empty paper there is nothing to
-   cover (already ~zero density), so it reads as near-invisible; over darker
-   ink it lays an actual lightening/white smear that the solver then advects. */
+/* ---- white pigment (opaque, covering) ----
+   White carries no subtractive absorption (it would be invisible on light
+   paper), so it lives in its OWN field as an accumulating opaque load that the
+   fluid advects alongside the dye. The display lays it over the subtractive
+   result, so it reads as real white ink on any background — light OR dark. */
 const FRAG_WHITE = /* glsl */`
   varying vec2 vUv;
   uniform sampler2D uTarget;
@@ -705,9 +779,27 @@ const FRAG_WHITE = /* glsl */`
   void main(){
     vec2 p = vUv - uPoint; p.x *= uAspect;
     float f = exp(-dot(p, p) / uRadius);
-    vec4 base = texture2D(uTarget, vUv);
-    float cover = clamp(uAmt * f, 0.0, 1.0);
-    gl_FragColor = vec4(base.rgb * (1.0 - cover), base.a);
+    float base = texture2D(uTarget, vUv).r;
+    gl_FragColor = vec4(min(base + uAmt * f, 3.0), 0.0, 0.0, 1.0);
+  }
+`;
+
+/* ---- eraser ----
+   A soft brush footprint that scales any field down toward zero. On the dye it
+   lifts ink-on-water density / 水墨 pigment load; on the white & wet fields it
+   removes those too. The per-mode stroke logic supplies the feel: ink mode also
+   lays velocity (so the cleared water flows), painterly mode does not. */
+const FRAG_ERASE = /* glsl */`
+  varying vec2 vUv;
+  uniform sampler2D uTarget;
+  uniform float uAspect;
+  uniform vec2  uPoint;
+  uniform float uRadius;
+  uniform float uAmt;
+  void main(){
+    vec2 p = vUv - uPoint; p.x *= uAspect;
+    float k = clamp(uAmt * exp(-dot(p, p) / uRadius), 0.0, 1.0);
+    gl_FragColor = texture2D(uTarget, vUv) * (1.0 - k);
   }
 `;
 
@@ -732,7 +824,7 @@ const FRAG_IMAGE = /* glsl */`
       vec3 c = clamp(texture2D(uImage, iuv).rgb, 0.004, 1.0);
       dens = max(-log(c / uPaper), 0.0);   // paper * exp(-dens) ≈ original colour
     }
-    gl_FragColor = vec4(dens, 1.0);
+    gl_FragColor = vec4(dens, 0.0);        // ink-on-water seed → no 水墨 load
   }
 `;
 
@@ -896,8 +988,11 @@ const matDrop = makeMat(FRAG_DROP, {
   uR:{value:0.04}, uColor:{value:v3()}, uSoft:{value:0.2},
 });
 const matScale   = makeMat(FRAG_SCALE,   { uTarget:{value:null}, uValue:{value:1} });
-const matDisplay = makeMat(FRAG_DISPLAY, { uDye:{value:null}, uAspect:{value:1}, uMode:{value:0}, uWetness:{value:0.85}, uGran:{value:0.55} });
+const matDisplay = makeMat(FRAG_DISPLAY, { uDye:{value:null}, uWhite:{value:null}, uAspect:{value:1}, uMode:{value:0}, uWetness:{value:0.85}, uGran:{value:0.55}, uPaper:{value:new THREE.Vector3(0.964, 0.951, 0.915)} });
 const matWhite = makeMat(FRAG_WHITE, {
+  uTarget:{value:null}, uAspect:{value:1}, uPoint:{value:v2()}, uRadius:{value:0.001}, uAmt:{value:0.6},
+});
+const matErase = makeMat(FRAG_ERASE, {
   uTarget:{value:null}, uAspect:{value:1}, uPoint:{value:v2()}, uRadius:{value:0.001}, uAmt:{value:0.6},
 });
 const matImage = makeMat(FRAG_IMAGE, {
@@ -920,7 +1015,7 @@ const matPaperWetDiffuse = makeMat(FRAG_PAPER_WET_DIFFUSE, {
 
 /* ---------------- render targets ---------------- */
 let W = 0, H = 0;
-let velocity, dye, wet, pressure, divergenceRT, curlRT, dyeHatRT, dyeBackRT;
+let velocity, dye, whiteFld, wet, pressure, divergenceRT, curlRT, dyeHatRT, dyeBackRT;
 
 function makeRT(w, h) {
   const rt = new THREE.WebGLRenderTarget(w, h, {
@@ -960,6 +1055,7 @@ function initFBOs(keepInk) {
   const [dw, dh] = gridSize(CFG.DYE_RES);
   const nVel = makeDouble(sw, sh);
   const nDye = makeDouble(dw, dh);
+  const nWht = makeDouble(dw, dh);
   const nWet = makeDouble(dw, dh);
   const nPre = makeDouble(sw, sh);
   const nDiv = makeRT(sw, sh);
@@ -969,14 +1065,15 @@ function initFBOs(keepInk) {
   if (keepInk && dye) {
     matScale.uniforms.uValue.value = 1;
     matScale.uniforms.uTarget.value = dye.read.texture;      blit(nDye.read, matScale);
+    matScale.uniforms.uTarget.value = whiteFld.read.texture; blit(nWht.read, matScale);
     matScale.uniforms.uTarget.value = velocity.read.texture; blit(nVel.read, matScale);
   }
   if (dye) {
-    velocity.dispose(); dye.dispose(); wet.dispose(); pressure.dispose();
+    velocity.dispose(); dye.dispose(); whiteFld.dispose(); wet.dispose(); pressure.dispose();
     divergenceRT.dispose(); curlRT.dispose();
     dyeHatRT.dispose(); dyeBackRT.dispose();
   }
-  velocity = nVel; dye = nDye; wet = nWet; pressure = nPre;
+  velocity = nVel; dye = nDye; whiteFld = nWht; wet = nWet; pressure = nPre;
   divergenceRT = nDiv; curlRT = nCur;
   dyeHatRT = nHat; dyeBackRT = nBak;
 }
@@ -997,16 +1094,32 @@ function dyeSplat(x, y, ink, radius, amount) {
   applySplat(dye, x, y, radius,
     [ink.a[0] * amount, ink.a[1] * amount, ink.a[2] * amount], ink.cap);
 }
-/* white covering pigment: push the local density down toward paper-white */
+/* opaque white pigment: accumulate load into the dedicated white field */
 function whiteCover(x, y, radius, amount) {
   const u = matWhite.uniforms;
-  u.uTarget.value = dye.read.texture;
+  u.uTarget.value = whiteFld.read.texture;
   u.uAspect.value = W / H;
   u.uPoint.value.set(x, y);
   u.uRadius.value = radius;
-  u.uAmt.value = Math.min(1.0, amount * 2.2);
-  blit(dye.write, matWhite);
-  dye.swap();
+  u.uAmt.value = amount * 0.6;
+  blit(whiteFld.write, matWhite);
+  whiteFld.swap();
+}
+/* eraser: scale a field down toward zero inside a soft brush footprint */
+function eraseField(fbo, x, y, radius, amount) {
+  const u = matErase.uniforms;
+  u.uTarget.value = fbo.read.texture;
+  u.uAspect.value = W / H;
+  u.uPoint.value.set(x, y);
+  u.uRadius.value = radius;
+  u.uAmt.value = amount;
+  blit(fbo.write, matErase);
+  fbo.swap();
+}
+function eraseDab(x, y, radius, amount) {
+  eraseField(dye, x, y, radius, amount);       // ink density / 水墨 pigment load
+  eraseField(whiteFld, x, y, radius, amount);  // opaque white pigment
+  eraseField(wet, x, y, radius, amount);       // dry the spot so colour can't re-bleed in
 }
 function velSplat(x, y, vx, vy, radius = CFG.VEL_RADIUS) {
   applySplat(velocity, x, y, radius, [vx, vy, 0], CFG.VEL_CAP);
@@ -1173,6 +1286,15 @@ function step(dt) {
   um.uCorrect.value = CFG.MC_CORRECT;
   blit(dye.write, matMacCormack);
   dye.swap();
+
+  // white pigment: a plain semi-Lagrangian advection (soft is fine for white),
+  // riding the same velocity and fading with the same ink-life dissipation
+  ua.uVelocity.value = velocity.read.texture;
+  ua.uSource.value = whiteFld.read.texture;
+  ua.uDt.value = dt;
+  ua.uDissipation.value = Math.exp(-CFG.DYE_DISS * dt);
+  blit(whiteFld.write, matAdvect);
+  whiteFld.swap();
 }
 
 /* 水墨 watercolour-on-paper: no advection, just capillary bleed weighted by
@@ -1207,6 +1329,7 @@ function stepPaper(dt) {
 
 function render() {
   matDisplay.uniforms.uDye.value = dye.read.texture;
+  matDisplay.uniforms.uWhite.value = whiteFld.read.texture;
   matDisplay.uniforms.uAspect.value = W / H;
   matDisplay.uniforms.uMode.value = (mode === 'painterly') ? 1 : 0;
   matDisplay.uniforms.uWetness.value = CFG.WETNESS;
@@ -1226,7 +1349,8 @@ function pickInk() {
 
 /* one brush dab — routed to the right surface model */
 function brushDab(x, y, ink, radius, amount) {
-  if (mode === 'painterly') paperDeposit(x, y, ink, radius, amount);
+  if (ink.kind === 'eraser') eraseDab(x, y, radius, amount);       // both modes
+  else if (mode === 'painterly') paperDeposit(x, y, ink, radius, amount);
   else if (ink === INKS.white) whiteCover(x, y, radius, amount);  // ink mode: covering white
   else dyeSplat(x, y, ink, radius, amount);
 }
@@ -1266,7 +1390,10 @@ function linerDown(e){
   liner.catch = 0.85 - CFG.SMOOTH * 0.55;          // catch-up easing (lower = laggier trail)
   liner.sx = x; liner.sy = y; liner.pwx = x; liner.pwy = y; liner.mx = x; liner.my = y;
   liner.arc = 0; liner.seed = Math.random() * 1000;
-  inkCtx.strokeStyle = inkCtx.fillStyle = linerColor();
+  // eraser selected → rub OUT existing pen strokes; otherwise draw normally
+  inkCtx.globalCompositeOperation = (selected === 'eraser') ? 'destination-out' : 'source-over';
+  if (selected === 'eraser') liner.w *= 2.0;   // a wider rub for the eraser
+  inkCtx.strokeStyle = inkCtx.fillStyle = (selected === 'eraser') ? '#000' : linerColor();
   inkCtx.lineWidth = liner.w; inkCtx.lineCap = 'round'; inkCtx.lineJoin = 'round';
   inkCtx.beginPath(); inkCtx.arc(x, y, liner.w * 0.5, 0, 6.28319); inkCtx.fill();   // touchdown dot
 }
@@ -1305,6 +1432,7 @@ function linerMove(e){
 function linerUp(e){
   if (!liner.drawing || e.pointerId !== liner.id) return;
   inkCtx.beginPath(); inkCtx.moveTo(liner.mx, liner.my); inkCtx.lineTo(liner.pwx, liner.pwy); inkCtx.stroke();
+  inkCtx.globalCompositeOperation = 'source-over';   // restore for drawImage on resize
   liner.drawing = false; liner.id = -1;
 }
 /* size the pen layer to match the WebGL canvas, preserving existing line work */
@@ -1375,8 +1503,9 @@ canvas.addEventListener('pointermove', e => {
       const invLen = 1.0 / len;
       if (!p.started) {
         // a slight wet creep BACK from the touchdown, along the stroke axis
+        // (skipped for the eraser — it should dry, not wet, the sheet)
         p.started = true;
-        wetTongue(p.x, p.y, -dx * invLen, -dy * invLen, r * 2.0);
+        if (strokeInk.kind !== 'eraser') wetTongue(p.x, p.y, -dx * invLen, -dy * invLen, r * 2.0);
       }
       p.dirx = dx * invLen; p.diry = dy * invLen; p.lastR = r;
       const steps = Math.max(1, Math.ceil(len / 0.004));
@@ -1422,16 +1551,19 @@ function endPointer(e) {
   const p = pointers.get(e.pointerId);
   if (!p) return;
   if (p.dist < 0.01) {
-    if (mode === 'painterly') {
+    const b2 = CFG.BRUSH * CFG.BRUSH;
+    if (strokeInk.kind === 'eraser') {
+      // a tap with the eraser: lift a soft spot
+      eraseDab(p.x, p.y, strokeInk.strokeR * 2.4 * b2, strokeInk.strokeD);
+    } else if (mode === 'painterly') {
       // a touch on paper: a small soft blot that settles into the tooth
-      const b2 = CFG.BRUSH * CFG.BRUSH;
       paperDeposit(p.x, p.y, strokeInk, strokeInk.strokeR * 2.4 * b2,
         strokeInk.strokeD * 1.35 * CFG.INK_AMT);
     } else {
       // a tap on water: a drop that displaces what was there (marbling rings)
       dropAlternate(p.x, p.y);
     }
-  } else if (mode === 'painterly') {
+  } else if (mode === 'painterly' && strokeInk.kind !== 'eraser') {
     // lifting the brush: wet pigment keeps wicking FORWARD along the stroke,
     // then dries and settles — not an abrupt hard stop
     wetTongue(p.x, p.y, p.dirx, p.diry, Math.max(p.lastR, 0.0008) * 2.2);
@@ -1451,10 +1583,12 @@ function washTick(dt) {
   if (washT <= 0) return;
   washT -= dt;
   scalePass(dye, Math.exp(-2.4 * dt));
+  scalePass(whiteFld, Math.exp(-2.4 * dt));
   scalePass(wet, Math.exp(-2.4 * dt));
   scalePass(velocity, Math.exp(-1.2 * dt));
   if (washT <= 0) {
     scalePass(dye, 0);
+    scalePass(whiteFld, 0);
     scalePass(wet, 0);
     scalePass(velocity, 0);
     scalePass(pressure, 0);
@@ -1475,13 +1609,25 @@ function selectSwatch(el) {
    that rebuilds that slot's pigment. Black and white are fixed tools. */
 const inkPicker = document.getElementById('inkPicker');
 let editTarget = null;
+/* Lay the hidden colour input EXACTLY over the element that opened it (same
+   box, not a 1px point) so the OS popup anchors to the swatch every time —
+   this is the fix for the picker sometimes appearing in the top-left corner. */
+function floatPicker(input, el) {
+  const r = el.getBoundingClientRect();
+  input.style.left   = Math.round(r.left)   + 'px';
+  input.style.top    = Math.round(r.top)    + 'px';
+  input.style.width  = Math.round(r.width)  + 'px';
+  input.style.height = Math.round(r.height) + 'px';
+  // Force a synchronous reflow so the native popup anchors to the NEW position.
+  // Without this the browser may still see the old box (0,0) and drop the
+  // picker in the top-left corner — the source of the intermittent jump.
+  void input.offsetWidth;
+}
 function openPicker(el) {
   editTarget = el;
   const ink = INKS[el.dataset.ink];
   inkPicker.value = ink && ink.hex ? ink.hex : '#888888';
-  const r = el.getBoundingClientRect();      // float the native popup by the swatch
-  inkPicker.style.left = Math.round(r.left) + 'px';
-  inkPicker.style.top  = Math.round(r.top - 4) + 'px';
+  floatPicker(inkPicker, el);
   inkPicker.click();
 }
 inkPicker.addEventListener('input', () => {
@@ -1517,6 +1663,58 @@ swEls.forEach(el => {
 
 document.getElementById('washBtn').addEventListener('click', startWash);
 
+/* ---------- background / paper colour (地) ----------
+   The chosen colour feeds the display shader's uPaper. Light grounds keep the
+   classic subtractive look; dark grounds reveal each pigment's body colour
+   (see the EMISSIVE REVEAL note in FRAG_DISPLAY). */
+let bgHex = '#f6f2e9';
+function setBg(hex) {
+  bgHex = hex;
+  const c = hexToRGB(hex);
+  matDisplay.uniforms.uPaper.value.set(c[0], c[1], c[2]);
+  document.documentElement.style.setProperty('--paper', hex);   // page bg during the load fade
+  const lum = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+  document.body.classList.toggle('darkground', lum < 0.4);      // flip floating labels to light
+}
+const bgEls = [...document.querySelectorAll('.bg')];
+const bgPicker = document.getElementById('bgPicker');
+const bgCustom = document.getElementById('bgCustom');
+bgEls.forEach(el => el.addEventListener('click', () => {
+  if (el === bgCustom) { floatPicker(bgPicker, bgCustom); bgPicker.value = bgHex; bgPicker.click(); return; }
+  setBg(el.dataset.bg);
+  bgEls.forEach(b => b.classList.toggle('sel', b === el));
+}));
+bgPicker.addEventListener('input', () => {
+  setBg(bgPicker.value);
+  bgCustom.style.setProperty('--b', bgPicker.value);
+  bgEls.forEach(b => b.classList.toggle('sel', b === bgCustom));
+});
+setBg(bgHex);
+
+/* ---------- save the artwork as a PNG (保存) ----------
+   Composite the fluid/paper canvas with the 細筆 pen overlay onto an offscreen
+   2D canvas and download it. Only the canvases are captured, so no UI is in the
+   image. We render a fresh frame and read it synchronously in the same tick —
+   the WebGL drawing buffer is still intact at that point. */
+function saveImage() {
+  render();                                   // fresh draw to the visible buffer
+  const out = document.createElement('canvas');
+  out.width = W; out.height = H;
+  const octx = out.getContext('2d');
+  octx.drawImage(canvas, 0, 0);               // paper + ink-on-water / wash
+  octx.drawImage(inkCanvas, 0, 0);            // 細筆 fineliner overlay on top
+  out.toBlob(blob => {
+    if (!blob) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    a.download = `suminagashi-${ts}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }, 'image/png');
+}
+document.getElementById('saveBtn').addEventListener('click', saveImage);
+
 /* ---------- import an image as ink (写真を墨に) ----------
    Seeds the dye/density field with the photo's pixels (contain-fit, centred),
    converted to absorption, so painting / swirling then drags and dissolves it. */
@@ -1546,9 +1744,11 @@ function importImage(file) {
     u.uImage.value = tex;
     u.uCanvasAspect.value = W / H;
     u.uImageAspect.value = img.width / Math.max(1, img.height);
+    // seed the pigment against a LIGHT reference (the image's colours are
+    // defined on white); the display then composites it onto any background.
     u.uPaper.value.set(0.964, 0.951, 0.915);
     blit(dye.write, matImage); dye.swap();          // seed the dye field
-    scalePass(velocity, 0); scalePass(wet, 0);      // sit still, dry
+    scalePass(velocity, 0); scalePass(wet, 0); scalePass(whiteFld, 0);   // sit still, dry, no white
     URL.revokeObjectURL(url);
   };
   img.onerror = () => URL.revokeObjectURL(url);
